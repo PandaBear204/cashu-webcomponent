@@ -1,0 +1,74 @@
+<!-- This example should be used with the cashu-webcomponent backend example -->
+<!DOCTYPE html>
+<html>
+
+	<head>
+		<!-- You can style cashu how you want by setting this variable before initialization - see docs -->
+		<!-- <script>window["cashuStyleCSS"] = `
+			button {
+				height: 100px;
+			}
+		`</script> -->
+		<script src="../cashu-webcomponent.js"></script>
+		<script>
+			//Get the user's cashu UID
+			const cashuUID = localStorage.getItem("cashu-webcomponent-uid");
+			
+			//Ask the backend for the content of the paywall string
+			function getPaywallContent() {
+				fetch(window.location.protocol + "//" + window.location.host + "/paywall?uid=" + cashuUID).then(function(response) {
+					if (response.ok) {
+						return response.json();
+					} else return null;
+				}).then(function(data) {
+					if (data !== null) document.getElementById("paywallcontent").innerHTML = data.text;
+				});
+			}
+			
+			//Ask the backend for the content of the times paid counter
+			function getTimesPaidCounter() {
+				fetch(window.location.protocol + "//" + window.location.host + "/timespaid?uid=" + cashuUID).then(function(response) {
+					if (response.ok) {
+						return response.json();
+					} else return null;
+				}).then(function(data) {
+					if (data !== null) document.getElementById("timespaidcounter").innerHTML = data.text;
+				});
+			}
+		
+			function loaded() {
+				document.getElementById("cashuid").innerHTML = cashuUID;
+				getPaywallContent();
+				getTimesPaidCounter();
+				
+				//Register an event when a cashu payment is made
+				addCashuOnPay(id => {
+					if (id === "paywall") {
+						getPaywallContent();
+					} else if (id === "counter") {
+						getTimesPaidCounter();
+					}
+				});
+			}
+		</script>
+	</head>
+
+	<body onload="loaded();">
+		<h1>Manage your balance with the website</h1>
+		<cashu-manager></cashu-manager>
+		<h1>Pay for a paywall</h1>
+		<p>This can either be pulled from your website balance or paid directly</p>
+		<cashu-pay cashu-id="paywall"></cashu-pay>
+		<br></br>
+		<p id="paywallcontent">You have NOT sent the example payment, i.e. some content is paywalled, etc.</p>
+		<h1>Pay for some other service</h1>
+		<p>This can either be pulled from your website balance or paid directly</p>
+		<cashu-pay cashu-id="counter"></cashu-pay>
+		<br></br>
+		<p>You have paid this: <span id="timespaidcounter">0</span> times</p>
+		<h1>Data</h1>
+		<p>Site Cashu User id (private info, should not typically be displayed except for backup purposes):</p>
+		<p><b id="cashuid"></b></p>
+	</body>
+
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "cashu-webcomponent-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "cashu-webcomponent-backend.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PandaBear204/cashu-webcomponent-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/PandaBear204/cashu-webcomponent-backend/issues"
+  },
+  "homepage": "https://github.com/PandaBear204/cashu-webcomponent-backend#readme",
+  "dependencies": {
+    "@cashu/cashu-ts": "^0.8.2-rc.4"
+  }
+}
