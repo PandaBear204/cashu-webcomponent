@@ -1,5 +1,6 @@
 # cashu-webcomponent
-images
+![cashu-webcomponent](cashu-web.png)
+
 cashu-webcomponent is a Webcomponent frontend and Node.js backend allowing websites to add simple drop-in functionality for [Cashu](https://github.com/cashubtc) ecash payments.
 
 # Usage
