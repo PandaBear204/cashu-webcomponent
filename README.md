@@ -41,12 +41,25 @@ if (timespaid > 0) {
 ```
 Internally, cashu-webcomponent uses GET endpoints with query parameters, which you can hook into in advanced use cases.
 # Install the demo
-
+First, clone the repo
+```bash
+git clone https://github.com/PandaBear204/cashu-webcomponent.git
+```
+Then, npm install both the actual backend and the example
+```bash
+cd cashu-webcomponent/backend
+npm install
+cd example
+npm install
+```
+Then, start the server
+```npm start```
+In your browser, navigate to `http://127.0.0.1:8000/example/`
 # Customize
 cashu-webcomponent allows you to customize certain features to work best for your use case
 ### Custom style
 To customize the way cashu-webcomponent looks on your frontend, set window["cashuStyleCSS"] before cashu is initialized. For a template, look at cashu-webcomponent.js
-```
+```html
 <script>window["cashuStyleCSS"] = `
 	button {
 		height: 100px;
