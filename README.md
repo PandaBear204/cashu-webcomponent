@@ -45,8 +45,16 @@ Internally, cashu-webcomponent uses GET endpoints with query parameters, which y
 # Customize
 cashu-webcomponent allows you to customize certain features to work best for your use case
 ### Custom style
-
+To customize the way cashu-webcomponent looks on your frontend, set window["cashuStyleCSS"] before cashu is initialized. For a template, look at cashu-webcomponent.js
+```
+<script>window["cashuStyleCSS"] = `
+	button {
+		height: 100px;
+	}
+`</script>
+<script src="../cashu-webcomponent.js"></script>
+```
 ### Backend database
-
+Have a database? You can pass a custom StorageManager to CashuWebcomponentBackend instead of the file-based one. For a template to implement this, see cashu-webcomponent-backend.js
 ### Use your own webserver implementation
-Not using express.js? 
+Not using express.js? You can pass a custom WebManager to CashuWebcomponentBackend instead of the express.js one. For a template to implement this, see cashu-webcomponent-backend.js
