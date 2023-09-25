@@ -18,6 +18,10 @@ const cashu = new CashuWebcomponentBackend(new ExpressWebManager(app), new FileS
 cashu.addPayment("paywall", {amount: 1, maxtimes: 1});
 cashu.addPayment("counter", {amount: 1});
 ```
+The adminCashuUID is the cashuUID of the admin user whose balance on the site will fill up with all finalized payments, ready to be withdrawn. This should be securely stored. Any user's cashu UID can be used for this, which can be obtained by 
+```javascript
+const cashuUID = localStorage.getItem("cashu-webcomponent-uid");
+```
 You can now add cashu to your frontend by downloading the script from this repo
 ```html
 <script src="cashu-webcomponent.js"></script>
