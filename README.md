@@ -18,7 +18,7 @@ const cashu = new CashuWebcomponentBackend(new ExpressWebManager(app), new FileS
 cashu.addPayment("paywall", {amount: 1, maxtimes: 1});
 cashu.addPayment("counter", {amount: 1});
 ```
-You can now add cashu to your frontend by either downloading the script from this repo or referencing it directly
+You can now add cashu to your frontend by downloading the script from this repo
 ```html
 <script src="cashu-webcomponent.js"></script>
 ```
