@@ -57,7 +57,9 @@ cd example
 npm install
 ```
 Then, start the server
-```npm start```
+```
+npm start
+```
 In your browser, navigate to `http://127.0.0.1:8000/example/`
 # Customize
 cashu-webcomponent allows you to customize certain features to work best for your use case
