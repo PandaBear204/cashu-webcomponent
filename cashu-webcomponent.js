@@ -1,11 +1,5 @@
 let _IsCashuLoading = false;
 
-const toHexString = (bytes) => {
-  return Array.from(bytes, (byte) => {
-    return ('0' + (byte & 0xff).toString(16)).slice(-2);
-  }).join('');
-};
-
 function numberWithCommas(x) {
     return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -14,9 +8,14 @@ const cashuOnPays = [];
 window["addCashuOnPay"] = function(func) {
 	cashuOnPays.push(func);
 };
+window["getCashuWebTokens"] = function(type) {
+	if (!_wallet) return [];
+	if (!_wallet.tokens[type]) return [];
+	return _wallet.tokens[type];
+};
 
 
-let _id, _selectedMint, _mints, _balance = null;
+let _selectedMint, _mints, _wallet = null;
 const _cashuUrl = window.location.protocol + "//" + window.location.host + "/cashu-webcomponent";
 
 const cashuElements = [];
@@ -232,22 +231,27 @@ function setError(error) {
 	}
 }
 
+function saveWallet() {
+	window.localStorage.setItem("cashu-webcomponent-wallet", JSON.stringify(_wallet));
+}
+
 function loadCashu(force = false) {
 	setLoading(true);
 	
-	//Get cashu UID
-	if (force || _id === null) {
-		_id = window.localStorage.getItem("cashu-webcomponent-uid");
-		if (_id === null) {
-			const newid = new Uint8Array(32);
-			crypto.getRandomValues(newid);
-			_id = toHexString(newid);
+	//Get wallet
+	if (force || _wallet === null) {
+		_wallet = JSON.parse(window.localStorage.getItem("cashu-webcomponent-wallet"));
+		if (_wallet === null) {
+			_wallet = {
+				wallets: {},
+				tokens: {}
+			};
 		}
-		window.localStorage.setItem("cashu-webcomponent-uid", _id);
+		saveWallet();
 	}
 	
 	//Check if there are unloaded balances
-	let unloadedBalances = _balance === null;
+	let unloadedBalances = _wallet === null;
 	if (!unloadedBalances) for (let i = 0; i < cashuElements.length; i++) {
 		if (cashuElements[i].balance === undefined) continue;
 		if (!cashuElements[i].loaded) {
@@ -285,21 +289,14 @@ function loadCashu(force = false) {
 				}
 				cashuElements[i].mintSelect.selectedIndex = _mints.indexOf(_selectedMint);
 			}
-			//Fetch our balance for this mint from the server
-			fetch(_cashuUrl + "/balance?uid=" + _id + "&mint=" + encodeURIComponent(_selectedMint)).then(function(response) {
-				return response.json();
-			}).then(function(data) {
-				_balance = data.balance;
-				//Populate components with balances
-				for (let i = 0; i < cashuElements.length; i++) {
-					if (cashuElements[i].balance !== undefined)  {
-						cashuElements[i].balance.innerHTML = numberWithCommas(_balance);
-						setLoadingComponent(cashuElements[i], false);
-					}
+			_balance = _wallet.wallets[_selectedMint] ? _wallet.wallets[_selectedMint].balance : 0;
+			//Populate components with balances
+			for (let i = 0; i < cashuElements.length; i++) {
+				if (cashuElements[i].balance !== undefined)  {
+					cashuElements[i].balance.innerHTML = numberWithCommas(_balance);
+					setLoadingComponent(cashuElements[i], false);
 				}
-			}).catch(function(err) {
-				console.log("Cannot fetch", err);
-			});
+			}
 		}).catch(function(err) {
 			console.log("Cannot fetch", err);
 		});
@@ -319,14 +316,16 @@ function loadCashu(force = false) {
 	
 	if (force || unloadedPays) {
 		for (let i = 0; i < cashuElements.length; i++) {
-			if (cashuElements[i].componentCashuId === undefined) continue;
-			fetch(_cashuUrl + "/payinfo?uid=" + _id + "&id=" + encodeURIComponent(cashuElements[i].componentCashuId)).then(function(response) {
+			const cid = cashuElements[i].componentCashuId;
+			if (cid === undefined) continue;
+			fetch(_cashuUrl + "/payinfo?id=" + encodeURIComponent(cid)).then(function(response) {
 				return response.json();
 			}).then(function(data) {
-				cashuElements[i].timesPaid = data.timespaid;
+				cashuElements[i].maxtimes = data.maxtimes;
 				cashuElements[i].payInt = data.amount;
 				cashuElements[i].payAmount.innerHTML = numberWithCommas(data.amount);
-				if (data.done) {
+				let wle = _wallet.tokens[cid] ? _wallet.tokens[cid].length : 0;
+				if (wle >= data.maxtimes) {
 					setErrorOne(cashuElements[i], "Already paid");
 				} else {
 					setLoadingComponent(cashuElements[i], false);
@@ -380,6 +379,43 @@ function getModal(title, shadowRoot, easyclose = true) {
 	});
 	
 	return {modal, modalBody};
+}
+
+async function makeDeposit(token, callback) {
+	let cw = new cashuTS.CashuWallet(new cashuTS.CashuMint(_selectedMint));
+	let recieveResponse;
+	try {
+		recieveResponse = await cw.receive(token);
+	} catch (err) {
+		setLoading(false);
+		return;
+	}
+	let mintwallet = _wallet.wallets[_selectedMint];
+	let proofs;
+	if (mintwallet === undefined) {
+		mintwallet = {};
+		proofs = []; 
+	} else proofs = mintwallet.proofs;
+	let amntTot = 0;
+	for (let i = 0; i < recieveResponse.token.token.length; i++) {
+		let tokenEntry = recieveResponse.token.token[i];
+		for (let j = 0; j < tokenEntry.proofs.length; j++) {
+			let proof = tokenEntry.proofs[j];
+			amntTot += proof.amount;
+			proofs.push(proof);
+		}
+	}
+	
+	mintwallet.proofs = proofs;
+	mintwallet.balance = mintwallet.balance ? mintwallet.balance + amntTot : amntTot;
+
+	_wallet.wallets[_selectedMint] = mintwallet;
+	
+	saveWallet();
+	
+	loadCashu(true);
+	
+	if (callback) await callback();
 }
 
 class CashuManager extends HTMLElement {
@@ -461,15 +497,10 @@ class CashuManager extends HTMLElement {
 	
 	const depositModalConfirm = document.createElement("button");
 	depositModalConfirm.innerHTML = "Deposit";
-	depositModalConfirm.addEventListener("click", () => {
+	depositModalConfirm.addEventListener("click", async () => {
 		depositModal.setAttribute("style", "display: none;");
 		setLoading(true);
-		fetch(_cashuUrl + "/deposit?uid=" + _id + "&mint=" + encodeURIComponent(_selectedMint) + "&token=" + encodeURIComponent(depositModalArea.value)).then(function(response) {
-			loadCashu(true);
-		}).catch(function(err) {
-			console.log("Cannot fetch", err);
-			setLoading(false);
-		});
+		await makeDeposit(depositModalArea.value);
 	});
 	depositModalBody.appendChild(depositModalConfirm);
 	
@@ -507,19 +538,45 @@ class CashuManager extends HTMLElement {
 	
 	const withdrawModalConfirm = document.createElement("button");
 	withdrawModalConfirm.innerHTML = "Withdraw";
-	withdrawModalConfirm.addEventListener("click", () => {
+	withdrawModalConfirm.addEventListener("click", async () => {
 		withdrawModal.setAttribute("style", "display: none;");
 		setLoading(true);
-		fetch(_cashuUrl + "/withdraw?uid=" + _id + "&mint=" + encodeURIComponent(_selectedMint) + "&amount=" + encodeURIComponent(withdrawModalArea.value)).then(function(response) {
-			return response.json();
-		}).then(function(data) {
-			tokenModalText.innerHTML = "Cashu token for " + withdrawModalArea.value + " sats. <b>IF YOU DO NOT SAVE THIS TOKEN BEFORE CLOSING THE WINDOW, THESE SATS WILL BE LOST.</b><br></br><br></br>" + data.token;
-			tokenModal.setAttribute("style", "display: block;");
-			loadCashu(true);
-		}).catch(function(err) {
-			console.log("Cannot fetch", err);
+		
+		let amountInt = parseInt(withdrawModalArea.value);
+		if (isNaN(amountInt)) {
 			setLoading(false);
-		});
+			return;
+		}
+		
+		let mintwallet = _wallet.wallets[_selectedMint];
+		let proofs;
+		if (mintwallet === undefined) {
+			mintwallet = {};
+			proofs = []; 
+		} else proofs = mintwallet.proofs;
+		
+		let cw = new cashuTS.CashuWallet(new cashuTS.CashuMint(_selectedMint));
+		let sendResponse;
+		try {
+			sendResponse = await cw.send(amountInt, proofs);
+		} catch (err) {
+			setLoading(false);
+			return;
+		}
+		
+		mintwallet.proofs = sendResponse.returnChange;
+		mintwallet.balance = mintwallet.balance ? mintwallet.balance - amountInt : 0;
+
+		_wallet.wallets[_selectedMint] = mintwallet;
+		
+		saveWallet();
+		
+		let tokenSend = {memo: "Cashu Web withdrawal", token: [{proofs: sendResponse.send, mint: _selectedMint}]};
+	
+		tokenModalText.innerHTML = "Cashu token for " + amountInt + " sats. <b>IF YOU DO NOT SAVE THIS TOKEN BEFORE CLOSING THE WINDOW, THESE SATS WILL BE LOST.</b><br></br><br></br>" + cashuTS.getEncodedToken(tokenSend);
+		tokenModal.setAttribute("style", "display: block;");
+		
+		loadCashu(true);
 	});
 	withdrawModalBody.appendChild(withdrawModalConfirm);
 	
@@ -556,7 +613,7 @@ class CashuManager extends HTMLElement {
   
 }
 
-customElements.define("cashu-manager", CashuManager);
+customElements.define("cashu-wallet", CashuManager);
 
 class CashuPay extends HTMLElement {
   constructor() {
@@ -640,19 +697,73 @@ class CashuPay extends HTMLElement {
 	} else {
 		this.componentCashuId = this.getAttribute("cashu-id");
 		const currentComponent = this;
-		const payfunction = () => {
+		const payfunction = async () => {
 			setLoading(true);
-			fetch(_cashuUrl + "/pay?uid=" + _id + "&mint=" + encodeURIComponent(_selectedMint) + "&id=" + encodeURIComponent(currentComponent.componentCashuId)).then(function(response) {
-				if (response.status === 402) {
-					setLoading(false);
-					depositModalArea.value = "";
-					depositModalText.innerHTML = "Insufficient balance! Enter a Cashu token on " + _selectedMint + " worth at least " + numberWithCommas(currentComponent.payInt - _balance) + " sats";
-					depositModal.setAttribute("style", "display: block;");
-				} else {
-					loadCashu(true);
-					for (let i = 0; i < cashuOnPays.length; i++) {
-						cashuOnPays[i](currentComponent.componentCashuId);
-					}
+			
+			if (_balance < currentComponent.payInt) {
+				depositModalArea.value = "";
+				depositModalText.innerHTML = "Insufficient balance! Enter a Cashu token on " + _selectedMint + " worth at least " + numberWithCommas(currentComponent.payInt - _balance) + " sats";
+				depositModal.setAttribute("style", "display: block;");
+				return;
+			}
+
+			let amountInt = currentComponent.payInt;
+			
+			let mintwallet = _wallet.wallets[_selectedMint];
+			let proofs;
+			if (mintwallet === undefined) {
+				mintwallet = {};
+				proofs = []; 
+			} else proofs = mintwallet.proofs;
+			
+			let cw = new cashuTS.CashuWallet(new cashuTS.CashuMint(_selectedMint));
+			let sendResponse;
+			try {
+				sendResponse = await cw.send(amountInt, proofs);
+			} catch (err) {
+				return;
+			}
+			
+			mintwallet.proofs = sendResponse.returnChange;
+			mintwallet.balance = mintwallet.balance ? mintwallet.balance - amountInt : 0;
+
+			_wallet.wallets[_selectedMint] = mintwallet;
+			
+			saveWallet();
+			
+			let tokenSend = {memo: "Cashu Web payment", token: [{proofs: sendResponse.send, mint: _selectedMint}]};
+			
+			let cashutoken = cashuTS.getEncodedToken(tokenSend);
+			
+			fetch(_cashuUrl + "/pay?cashutoken=" + encodeURIComponent(cashutoken) + "&mint=" + encodeURIComponent(_selectedMint) + "&id=" + encodeURIComponent(currentComponent.componentCashuId)).then(function(response) {
+				return response.json();
+			}).then(function(data) {
+				if (data.cashutoken) {
+					let mintwallet = _wallet.wallets[_selectedMint];
+					let proofs;
+					if (mintwallet === undefined) {
+						mintwallet = {};
+						proofs = []; 
+					} else proofs = mintwallet.proofs;
+					
+					proofs.push(cashuTS.getDecodedToken(data.cashutoken));
+					
+					mintwallet.proofs = proofs;
+					mintwallet.balance = mintwallet.balance ? mintwallet.balance + amountInt : amountInt;
+
+					_wallet.wallets[_selectedMint] = mintwallet;
+					
+					saveWallet();
+				} else if (data.token) {
+					let currtokens = _wallet.tokens[currentComponent.componentCashuId];
+					if (currtokens === undefined) currtokens = [];
+					currtokens.push(data.token);
+					_wallet.tokens[currentComponent.componentCashuId] = currtokens;
+					saveWallet();
+				}
+				loadCashu(true);
+				for (let i = 0; i < cashuOnPays.length; i++) {
+					cashuOnPays[i](currentComponent.componentCashuId);
 				}
 			}).catch(function(err) {
 				console.log("Cannot fetch", err);
@@ -660,15 +771,10 @@ class CashuPay extends HTMLElement {
 		};
 		buttonPay.addEventListener("click", payfunction);
 		
-		depositModalConfirm.addEventListener("click", () => {
+		depositModalConfirm.addEventListener("click", async () => {
 			depositModal.setAttribute("style", "display: none;");
 			setLoading(true);
-			fetch(_cashuUrl + "/deposit?uid=" + _id + "&mint=" + encodeURIComponent(_selectedMint) + "&token=" + encodeURIComponent(depositModalArea.value)).then(function(response) {
-				payfunction();
-			}).catch(function(err) {
-				console.log("Cannot fetch", err);
-				setLoading(false);
-			});
+			await makeDeposit(depositModalArea.value, payfunction);
 		});
 	}
 	

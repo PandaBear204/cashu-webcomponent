@@ -16,8 +16,13 @@ const PORT = 8000;
 //initialize cashu stuff
 //you can implement your own webmanager and storagemanager - see docs
 //note that removing a mint that the website previously supported will require you to manually transfer user funds to a different mint, as they will no longer have access to them.
-//the final argument is the cashu UID of the admin user, where all paid funds land. This should be stored securely and not plainly in the code like in this example.
-const cashu = new CashuWebcomponentBackend(new ExpressWebManager(app), new FileStorageManager("/cashu/test"), ["https://8333.space:3338"], "72c85258e72196eb7d5f4a44fb7844cafe650a3d2ef649f6c79e80432c105430");
+const cashu = new CashuWebcomponentBackend(new ExpressWebManager(app), new FileStorageManager("/cashu/test"), ["https://8333.space:3338"]);
+
+//Receive serialized cashu tokens from users making payments.
+//This should hook into your cashu wallet or be saved somewhere for someone to manually receive to a wallet.
+cashu.onReceive((cashutoken) => {
+	console.log("Cashu token received: " + cashutoken);
+});
 
 //One time payment id "paywall" for 1 sat. If this is repeated elsewhere, it will update the price.
 cashu.addPayment("paywall", {amount: 1, maxtimes: 1}); 
@@ -25,19 +30,14 @@ cashu.addPayment("paywall", {amount: 1, maxtimes: 1});
 //Repeatable payment id "counter" for 1 sat. If this is repeated elsewhere, it will update the price.
 cashu.addPayment("counter", {amount: 1});
 
-//add paywalled endpoints for frontend to use
+//add paywalled endpoint for frontend to use
 app.get("/paywall", async (req, res) => {
-	let timespaid = await cashu.getTimesPaid(req.query.uid, "paywall");
-	if (timespaid > 0) {
+	let paid = await cashu.getTokenType(req.query.token) === "paywall";
+	if (paid) {
 		res.send({text: "You have paid the example payment, i.e. some paywalled content is shown."});
 	} else {
 		res.sendStatus(401);
 	}
-});
-
-app.get("/timespaid", async (req, res) => {
-	let timespaid = await cashu.getTimesPaid(req.query.uid, "counter");
-	res.send({text: timespaid});
 });
 
 //open express server
