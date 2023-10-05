@@ -41,7 +41,7 @@ if (paywalltokens.length >= 1) {
 ```
 You can then pass this to the backend in requests and use
 ```javascript
-let paid = await cashu.getTokenType(req.query.token) === "paywall";
+let paid = await cashu.getTokenType(req.query.token) === "paywall"; //Returns null if the token is not found to be real
 if (paid) {
 	//do something
 }
