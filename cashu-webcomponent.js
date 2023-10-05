@@ -1,5 +1,3 @@
-let _IsCashuLoading = false;
-
 function numberWithCommas(x) {
     return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -235,7 +233,7 @@ function saveWallet() {
 	window.localStorage.setItem("cashu-webcomponent-wallet", JSON.stringify(_wallet));
 }
 
-function loadCashu(force = false) {
+async function loadCashu(force = false) {
 	setLoading(true);
 	
 	//Get wallet
@@ -265,9 +263,9 @@ function loadCashu(force = false) {
 		_selectedMint = window.localStorage.getItem("cashu-webcomponent-selectedmint");
 
 		//Fetch a list of mints from the server
-		fetch(_cashuUrl + "/mints").then(function(response) {
-			return response.json();
-		}).then(function(data) {
+		try {
+			let response = await fetch(_cashuUrl + "/mints");
+			let data = await response.json();
 			_mints = data;
 			if (_mints.length === 0) {
 				setError("Server has no mints");
@@ -297,9 +295,11 @@ function loadCashu(force = false) {
 					setLoadingComponent(cashuElements[i], false);
 				}
 			}
-		}).catch(function(err) {
+		} catch (err) {
 			console.log("Cannot fetch", err);
-		});
+			setError("Cannot fetch");
+			return;
+		}
 		
 	//Reset loading on all components with balances
 	} else { for (let i = 0; i < cashuElements.length; i++) if (cashuElements[i].balance !== undefined) setLoadingComponent(cashuElements[i], false); }
@@ -318,9 +318,9 @@ function loadCashu(force = false) {
 		for (let i = 0; i < cashuElements.length; i++) {
 			const cid = cashuElements[i].componentCashuId;
 			if (cid === undefined) continue;
-			fetch(_cashuUrl + "/payinfo?id=" + encodeURIComponent(cid)).then(function(response) {
-				return response.json();
-			}).then(function(data) {
+			try {
+				let response = await fetch(_cashuUrl + "/payinfo?id=" + encodeURIComponent(cid));
+				let data = await response.json();
 				cashuElements[i].maxtimes = data.maxtimes;
 				cashuElements[i].payInt = data.amount;
 				cashuElements[i].payAmount.innerHTML = numberWithCommas(data.amount);
@@ -330,9 +330,12 @@ function loadCashu(force = false) {
 				} else {
 					setLoadingComponent(cashuElements[i], false);
 				}
-			}).catch(function(err) {
+			} catch (err) {
 				console.log("Cannot fetch", err);
-			});
+				setError("Cannot fetch");
+				return;
+			}
+
 		}
 	}
 	
@@ -413,7 +416,7 @@ async function makeDeposit(token, callback) {
 	
 	saveWallet();
 	
-	loadCashu(true);
+	await loadCashu(true);
 	
 	if (callback) await callback();
 }
@@ -472,10 +475,10 @@ class CashuManager extends HTMLElement {
 	
 	this.mintSelect = document.createElement("select");
 	this.mintSelect.setAttribute("class", "text black small select");
-	this.mintSelect.addEventListener("change", () => {
+	this.mintSelect.addEventListener("change", async () => {
 		_selectedMint = _mints[this.mintSelect.selectedIndex];
 		window.localStorage.setItem("cashu-webcomponent-selectedmint", _selectedMint);
-		loadCashu(true);
+		await loadCashu(true);
 		
 	});
 	left.appendChild(this.mintSelect);
@@ -576,7 +579,7 @@ class CashuManager extends HTMLElement {
 		tokenModalText.innerHTML = "Cashu token for " + amountInt + " sats. <b>IF YOU DO NOT SAVE THIS TOKEN BEFORE CLOSING THE WINDOW, THESE SATS WILL BE LOST.</b><br></br><br></br>" + cashuTS.getEncodedToken(tokenSend);
 		tokenModal.setAttribute("style", "display: block;");
 		
-		loadCashu(true);
+		await loadCashu(true);
 	});
 	withdrawModalBody.appendChild(withdrawModalConfirm);
 	
@@ -735,9 +738,10 @@ class CashuPay extends HTMLElement {
 			
 			let cashutoken = cashuTS.getEncodedToken(tokenSend);
 			
-			fetch(_cashuUrl + "/pay?cashutoken=" + encodeURIComponent(cashutoken) + "&mint=" + encodeURIComponent(_selectedMint) + "&id=" + encodeURIComponent(currentComponent.componentCashuId)).then(function(response) {
-				return response.json();
-			}).then(function(data) {
+			try {
+			
+				let response = await fetch(_cashuUrl + "/pay?cashutoken=" + encodeURIComponent(cashutoken) + "&mint=" + encodeURIComponent(_selectedMint) + "&id=" + encodeURIComponent(currentComponent.componentCashuId));
+				let data = await response.json();
 				if (data.cashutoken) {
 					let mintwallet = _wallet.wallets[_selectedMint];
 					let proofs;
@@ -761,13 +765,17 @@ class CashuPay extends HTMLElement {
 					_wallet.tokens[currentComponent.componentCashuId] = currtokens;
 					saveWallet();
 				}
-				loadCashu(true);
+				await loadCashu(true);
 				for (let i = 0; i < cashuOnPays.length; i++) {
 					cashuOnPays[i](currentComponent.componentCashuId);
 				}
-			}).catch(function(err) {
+				
+			} catch(err) {
 				console.log("Cannot fetch", err);
-			});
+				setError("Cannot fetch");
+				return;
+			}
+			
 		};
 		buttonPay.addEventListener("click", payfunction);
 		
